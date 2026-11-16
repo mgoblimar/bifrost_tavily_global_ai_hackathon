@@ -2,9 +2,40 @@
 
 **Checks whether an AI answer is still true.**
 
-Built on **Tavily** and **Bifrost** · Geek Room Global AI Hackathon 2026 · Team Jenx
+Geek Room Global AI Hackathon 2026 · Team Jenx
+
+![Tavily](https://img.shields.io/badge/Tavily-live_web_search-1FB6FF?style=for-the-badge)
+![Bifrost](https://img.shields.io/badge/Bifrost_by_Maxim_AI-model_gateway-7C3AED?style=for-the-badge)
+
+![Python](https://img.shields.io/badge/Python_3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq-F55036)
+![Gemini](https://img.shields.io/badge/Gemini-4285F4?logo=googlegemini&logoColor=white)
+![pytest](https://img.shields.io/badge/pytest-70_tests-0A9EDC?logo=pytest&logoColor=white)
 
 ▶ **[Watch the demo on YouTube (2 min)](https://www.youtube.com/watch?v=ry31t3oniZ4)** · [video file](demo/carbon-date-demo.mp4)
+
+## The problem
+
+**AI answers carry no date.** A model's knowledge stops at its training cutoff, but it
+answers with the same confidence either way.
+
+- **What goes stale:** who holds a role, prices and plans, software versions, laws and regulations.
+- **Who is exposed:** any AI app that answers without live search, such as custom assistants, support bots and tools that answer from stored documents.
+- **Why it is hard to catch:** nothing fails. No error is logged. The first signal is a user who acted on a wrong answer.
+- **Why a web search alone is not enough:** the web is stale too. Company bios, wikis and profile pages often carry no date and lag behind events.
+
+We hit this ourselves. Four days after Nvidia's CEO resigned, our own hand-written test
+still said he was CEO, and so did the undated pages in the search results. Only dated
+news showed the change.
+
+**Carbon Date addresses two hackathon problem statements:**
+
+| | Problem statement | Our answer |
+|---|---|---|
+| **06** | Build a Stale-Answer Detector for AI Applications | A verification layer: an API any AI app can call, plus a page to try it |
+| **05** | Build a Pre-Meeting Briefing Agent | An AI app built on that layer, which checks its own draft |
 
 ## Example
 
@@ -23,11 +54,11 @@ Real run, 16 November 2026. Each correction comes with a source.
 
 ## Three ways to use it
 
-| | What | Problem statement |
+| | What | For |
 |---|---|---|
-| **API** | `POST /v1/verify`, for your own AI app | 06 Stale-Answer Detector |
-| **Detector page** | Paste an answer, see the result | 06 |
-| **Briefing page** | One-page brief before a meeting, self-checked | 05 Pre-Meeting Briefing |
+| **API** | `POST /v1/verify` | Your own AI app |
+| **Detector page** | Paste an answer, see the result | Checking by hand |
+| **Briefing page** | One-page brief before a meeting, self-checked | Meeting prep |
 
 ## Quick start
 
@@ -193,12 +224,46 @@ Computed in [stale_detector/scoring.py](stale_detector/scoring.py), not by the m
 
 </details>
 
-## Tavily and Bifrost
+## Powered by Tavily and Bifrost
 
-| | Role |
+Both are required for the app to work. Neither is optional.
+
+### 🔎 Tavily: the only source of facts
+
+Models may use nothing but Tavily's results. Code: [core/search.py](core/search.py)
+
+| Tavily feature | Used for |
 |---|---|
-| **Tavily** | Only source of facts: web search, dated news, trusted-site search. |
-| **Bifrost** | Only path to a model: routes fast and strong models, falls back between Groq and Gemini, caps spend with a virtual key. |
+| General search | Finding the current state of each claim |
+| News search by days | Dated evidence from the last year |
+| News search by date range | The 30 days before a meeting |
+| `include_domains` | Searching trusted official sites first |
+
+### 🌉 Bifrost: the only path to a model
+
+The app never holds a provider key. Code: [core/llm.py](core/llm.py) · [bifrost/config.json](bifrost/config.json)
+
+| Bifrost feature | Used for |
+|---|---|
+| One endpoint, many providers | Groq and Gemini behind a single API |
+| Routing by task | A fast model extracts claims; a stronger one verifies |
+| Automatic fallback | Every call names a backup on the other provider |
+| Virtual key and budget | The app's access, capped at 5 US dollars a month |
+| Routing info in responses | Showing which provider answered each call |
+
+The fallback fired for real during development, when a Gemini model returned 503 errors
+and calls moved to Groq.
+
+### 🧰 Other tools
+
+| Tool | Role |
+|---|---|
+| **Python 3.12** | Language |
+| **FastAPI** | The verification API |
+| **Streamlit** | The detector and briefing pages |
+| **Groq** | Fast model for claim extraction |
+| **Google Gemini** | Stronger model for verdicts and drafting |
+| **pytest** | 70 unit tests |
 
 ## Evaluation
 
@@ -222,10 +287,6 @@ Small set, one labeller: a sanity check, not a benchmark.
 - Free-tier rate limits can leave an item unchecked.
 - Max 6 claims per answer, 5 items per briefing.
 - The API has no rate limiting. Keep it on localhost.
-
-## Tech
-
-Python · FastAPI · Streamlit · Tavily Search API · Bifrost gateway · Groq · Gemini · pytest
 
 <details>
 <summary>Project layout</summary>
