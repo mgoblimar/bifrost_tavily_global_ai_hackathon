@@ -27,6 +27,8 @@ def search_web(
     max_results: int = 5,
     days: int | None = None,
     depth: str = "advanced",
+    start_date: date | None = None,
+    end_date: date | None = None,
 ) -> tuple[Source, ...]:
     """Search the live web.
 
@@ -41,6 +43,10 @@ def search_web(
     if days is not None:
         options["topic"] = "news"
         options["days"] = days
+    if start_date is not None and end_date is not None:
+        options["topic"] = "news"
+        options["start_date"] = start_date.isoformat()
+        options["end_date"] = end_date.isoformat()
 
     try:
         response = TavilyClient(api_key=api_key).search(**options)

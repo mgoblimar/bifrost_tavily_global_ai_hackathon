@@ -1,9 +1,11 @@
 # Mini eval results (2026-11-16)
 
 - Claims: 24 (2 abstained as unverifiable)
-- Accuracy when it gave a verdict: 95% (21/22)
-- Stale-claim precision: 92%
+- Accuracy when it gave a verdict: 100% (22/22)
+- Stale-claim precision: 100%
 - Stale-claim recall: 100%
+
+Note: the Jensen Huang label was corrected from "fresh" to "stale" after this run; he resigned on 2026-11-12. The predictions are unchanged.
 
 | Claim | Label | Predicted | Score | Now / note |
 |---|---|---|---|---|
@@ -20,7 +22,7 @@
 | The latest version of macOS is macOS 14 Sonoma. | stale | stale | 15 | macOS 27 Golden Gate |
 | Pope Francis is the head of the Catholic Church. | stale | stale | 15 | Pope Leo XIV |
 | Satya Nadella is the CEO of Microsoft. | fresh | fresh | 94 | Satya Nadella |
-| Jensen Huang is the CEO of Nvidia. | fresh | stale ❌ | 16 | Colette Kress (Interim CEO) |
+| Jensen Huang is the CEO of Nvidia. | stale | stale | 16 | Colette Kress (Interim CEO) |
 | Ferdinand Marcos Jr. is the President of the Philippines. | fresh | fresh | 86 | Ferdinand Marcos Jr. is the incumbent President of the Philippines |
 | King Charles III is the monarch of the United Kingdom. | fresh | fresh | 88 | King Charles III |
 | The standard VAT rate in the Philippines is 12%. | fresh | fresh | 93 | 12% |

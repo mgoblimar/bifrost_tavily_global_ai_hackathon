@@ -12,7 +12,7 @@
   {"claim": "The latest version of macOS is macOS 14 Sonoma.", "label": "stale"},
   {"claim": "Pope Francis is the head of the Catholic Church.", "label": "stale"},
   {"claim": "Satya Nadella is the CEO of Microsoft.", "label": "fresh"},
-  {"claim": "Jensen Huang is the CEO of Nvidia.", "label": "fresh"},
+  {"claim": "Jensen Huang is the CEO of Nvidia.", "label": "stale"},
   {"claim": "Ferdinand Marcos Jr. is the President of the Philippines.", "label": "fresh"},
   {"claim": "King Charles III is the monarch of the United Kingdom.", "label": "fresh"},
   {"claim": "The standard VAT rate in the Philippines is 12%.", "label": "fresh"},

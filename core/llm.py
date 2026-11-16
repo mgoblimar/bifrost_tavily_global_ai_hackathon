@@ -7,6 +7,7 @@ actually served the request.
 """
 
 import json
+import time
 from dataclasses import dataclass
 
 import requests
@@ -14,6 +15,10 @@ import requests
 from core.config import ModelRoute
 
 REQUEST_TIMEOUT_SECONDS = 60
+# Bifrost already fails over to the other provider. If both are briefly rate
+# limited or overloaded (common on free tiers), wait and try the pair again.
+RETRYABLE_STATUS_CODES = (429, 503)
+RETRY_DELAYS_SECONDS = (8, 20)
 
 
 class LLMError(RuntimeError):
@@ -47,21 +52,18 @@ def chat_json(
         "temperature": 0,
         "response_format": {"type": "json_object"},
     }
-    try:
-        response = requests.post(
-            f"{bifrost_url}/v1/chat/completions",
-            json=payload,
-            headers={"x-bf-vk": virtual_key},
-            timeout=REQUEST_TIMEOUT_SECONDS,
-        )
-    except requests.ConnectionError as exc:
-        raise LLMError(
-            f"Cannot reach the Bifrost gateway at {bifrost_url}. "
-            "Start it with scripts/start_bifrost.ps1."
-        ) from exc
-    except requests.RequestException as exc:
-        raise LLMError(f"Request to Bifrost failed: {exc}") from exc
+    response = _post(bifrost_url, virtual_key, payload)
+    for delay in RETRY_DELAYS_SECONDS:
+        if response.status_code not in RETRYABLE_STATUS_CODES:
+            break
+        time.sleep(delay)
+        response = _post(bifrost_url, virtual_key, payload)
 
+    if response.status_code in RETRYABLE_STATUS_CODES:
+        raise LLMError(
+            f"Both model providers are rate-limited or overloaded "
+            f"(HTTP {response.status_code}). Wait a minute and try again."
+        )
     if response.status_code != 200:
         raise LLMError(
             f"Bifrost returned HTTP {response.status_code}: {response.text[:300]}"
@@ -75,6 +77,23 @@ def chat_json(
 
     call = _build_call(body, content, route.primary)
     return parse_json_object(content), call
+
+
+def _post(bifrost_url: str, virtual_key: str, payload: dict) -> requests.Response:
+    try:
+        return requests.post(
+            f"{bifrost_url}/v1/chat/completions",
+            json=payload,
+            headers={"x-bf-vk": virtual_key},
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+    except requests.ConnectionError as exc:
+        raise LLMError(
+            f"Cannot reach the Bifrost gateway at {bifrost_url}. "
+            "Start it with scripts/start_bifrost.ps1."
+        ) from exc
+    except requests.RequestException as exc:
+        raise LLMError(f"Request to Bifrost failed: {exc}") from exc
 
 
 def _build_call(body: dict, content: str, requested_model: str) -> LLMCall:
