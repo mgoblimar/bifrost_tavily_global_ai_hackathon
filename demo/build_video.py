@@ -22,6 +22,11 @@ WIDTH, HEIGHT, FPS = 1280, 720, 25
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 ENCODE = ["-c:v", "libx264", "-preset", "medium", "-crf", "21", "-pix_fmt", "yuv420p", "-an"]
 PAGE_SWITCH_SECONDS = 1.8  # blank frames while the browser loads the next page
+WAIT_LEAD_SECONDS = 1.2  # how much of each wait stays visible before the cut
+# The recorders note each wait as [start + 2.0, end - margin] on their own clock.
+RECORDED_LEAD_SECONDS = 2.0
+BROWSER_END_MARGIN = 0.5
+TERMINAL_START_DELAY = 0.5  # ffmpeg takes about this long to begin capturing
 
 CARD_HTML = """<html><body style="margin:0;width:1280px;height:720px;background:{background};
 color:{ink};font-family:Arial,sans-serif;display:flex;flex-direction:column;
@@ -113,6 +118,45 @@ def keep_filter(cuts: list[list[float]], start: float = 0.0, end: float | None =
     return f"fps={FPS},select='{'*'.join(conditions)}',setpts=N/{FPS}/TB"
 
 
+def video_seconds(path: Path) -> float:
+    """Length of a recording, read by decoding it."""
+    result = subprocess.run(
+        [FFMPEG, "-hide_banner", "-i", str(path), "-f", "null", "-"],
+        capture_output=True, text=True, check=True,
+    )
+    stamp = result.stderr.rsplit("time=", 1)[1].split()[0]
+    hours, minutes, seconds = stamp.split(":")
+    return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+
+def browser_cuts() -> list[list[float]]:
+    """Wait ranges on the video's own timeline.
+
+    The recorder's clock starts a few seconds before the video does, so its
+    timestamps are shifted by the difference between the two lengths.
+    """
+    data = json.loads((RAW_DIR / "cuts.json").read_text(encoding="utf-8"))
+    offset = data["total"] - video_seconds(RAW_DIR / "browser.webm")
+    return [
+        [
+            start - RECORDED_LEAD_SECONDS - offset + WAIT_LEAD_SECONDS,
+            end + BROWSER_END_MARGIN - offset - 0.3,
+        ]
+        for start, end in data["cuts"]
+    ]
+
+
+def terminal_cuts() -> list[list[float]]:
+    data = json.loads((RAW_DIR / "terminal_cuts.json").read_text(encoding="utf-8"))
+    return [
+        [
+            start - RECORDED_LEAD_SECONDS - TERMINAL_START_DELAY + WAIT_LEAD_SECONDS,
+            end - TERMINAL_START_DELAY,
+        ]
+        for start, end in data["cuts"]
+    ]
+
+
 def build_card(name: str) -> Path:
     seconds = CARDS[name][0]
     target = RAW_DIR / f"seg_{name}.mp4"
@@ -122,7 +166,7 @@ def build_card(name: str) -> Path:
 
 
 def build_terminal() -> Path:
-    cuts = json.loads((RAW_DIR / "terminal_cuts.json").read_text(encoding="utf-8"))["cuts"]
+    cuts = terminal_cuts()
     target = RAW_DIR / "seg_terminal.mp4"
     fit = (
         f"scale={WIDTH - 120}:{HEIGHT - 150}:force_original_aspect_ratio=decrease,"
@@ -138,7 +182,7 @@ def build_terminal() -> Path:
 
 
 def build_browser_part(name: str, start: float, end: float | None) -> Path:
-    cuts = json.loads((RAW_DIR / "cuts.json").read_text(encoding="utf-8"))["cuts"]
+    cuts = browser_cuts()
     target = RAW_DIR / f"seg_{name}.mp4"
     run(["-i", str(RAW_DIR / "browser.webm"),
          "-vf", f"{keep_filter(cuts, start, end)},scale={WIDTH}:{HEIGHT}", *ENCODE, str(target)])
