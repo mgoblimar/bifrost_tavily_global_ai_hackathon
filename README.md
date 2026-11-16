@@ -12,6 +12,13 @@ and the sources for every claim.
 | **Verification layer** | 06, Stale-Answer Detector for AI Applications | An HTTP API (`POST /v1/verify`) that any AI app can call before showing a model's answer, plus a page for trying it by hand. |
 | **Pre-Meeting Briefing** | 05, Pre-Meeting Briefing Agent | An AI application built on that layer. It researches a company or person over the last 30 days, drafts a one-page briefing, then uses the layer to check its own draft and the user's talking points. |
 
+## Demo video
+
+[demo/carbon-date-demo.mp4](demo/carbon-date-demo.mp4) is a 100-second silent, captioned
+recording of real runs: the example chat app in a terminal, a call to the API, the
+detector page and the briefing page. Waiting time is trimmed and marked as such.
+The scripts in `demo/` re-record it (they need `pip install playwright imageio-ffmpeg`).
+
 ## Who it is for
 
 **Developers who ship AI features.** A model's knowledge stops at its training date, but

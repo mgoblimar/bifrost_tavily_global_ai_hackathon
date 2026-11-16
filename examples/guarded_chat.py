@@ -78,7 +78,9 @@ def main() -> None:
         sys.exit('Usage: python -m examples.guarded_chat "your question"')
     question = " ".join(sys.argv[1:])
     answer = ask_model(question)
-    sys.stdout.write(format_reply(answer, verify(answer)) + "\n")
+    reply = format_reply(answer, verify(answer))
+    # Models often emit non-breaking hyphens, which many console fonts cannot draw.
+    sys.stdout.write(reply.replace("‑", "-") + "\n")
 
 
 if __name__ == "__main__":

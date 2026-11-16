@@ -7,3 +7,7 @@ __pycache__/
 # Bifrost runtime data (keep only config.json)
 bifrost/*
 !bifrost/config.json
+
+# Demo recording tooling and output
+.playwright/
+demo/raw/
