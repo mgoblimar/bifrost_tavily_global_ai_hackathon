@@ -2,9 +2,9 @@
 
 import streamlit as st
 
-st.set_page_config(page_title="Fresh Facts", page_icon="🧭", layout="wide")
+st.set_page_config(page_title="Carbon Date", page_icon="🧭", layout="wide")
 
-st.title("Fresh Facts")
+st.title("Carbon Date")
 st.caption(
     "A freshness check for AI applications, built on Tavily and Bifrost. "
     "Apps call it over HTTP at POST /v1/verify; these pages let you try it by hand."

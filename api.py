@@ -1,11 +1,11 @@
-"""Fresh Facts verification API: a freshness check any AI application can call.
+"""Carbon Date verification API: a freshness check any AI application can call.
 
 Run with:  uvicorn api:app --port 8600
 
     POST /v1/verify   {"answer": "<text your model produced>"}
     ->   per-claim verdict, current value, freshness score and sources
 
-If FRESH_FACTS_API_KEY is set, callers must send it in the X-API-Key header.
+If CARBON_DATE_API_KEY is set, callers must send it in the X-API-Key header.
 """
 
 import hmac
@@ -21,10 +21,10 @@ from core.trusted import parse_domains
 from stale_detector.pipeline import MAX_ANSWER_CHARS, analyze
 from stale_detector.serialize import report_to_dict
 
-logger = logging.getLogger("fresh_facts.api")
+logger = logging.getLogger("carbon_date.api")
 
 app = FastAPI(
-    title="Fresh Facts verification API",
+    title="Carbon Date verification API",
     description="Checks the time-sensitive claims in an AI-generated answer "
     "against the live web and returns a freshness score for each.",
     version="1.0.0",
@@ -51,7 +51,7 @@ class VerifyRequest(BaseModel):
 
 def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
     """Enforce the API key when one is configured; open on localhost otherwise."""
-    expected = os.getenv("FRESH_FACTS_API_KEY", "").strip()
+    expected = os.getenv("CARBON_DATE_API_KEY", "").strip()
     if not expected:
         return
     if not x_api_key or not hmac.compare_digest(x_api_key, expected):

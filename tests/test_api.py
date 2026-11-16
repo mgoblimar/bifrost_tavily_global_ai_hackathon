@@ -35,7 +35,7 @@ def client(monkeypatch):
 
     monkeypatch.setattr(api, "load_settings", lambda: object())
     monkeypatch.setattr(api, "analyze", fake_analyze)
-    monkeypatch.delenv("FRESH_FACTS_API_KEY", raising=False)
+    monkeypatch.delenv("CARBON_DATE_API_KEY", raising=False)
     test_client = TestClient(api.app)
     test_client.seen = seen
     return test_client
@@ -110,7 +110,7 @@ def test_missing_configuration_returns_500_without_leaking_details(client, monke
 
 
 def test_api_key_is_enforced_when_configured(client, monkeypatch):
-    monkeypatch.setenv("FRESH_FACTS_API_KEY", "s3cret")
+    monkeypatch.setenv("CARBON_DATE_API_KEY", "s3cret")
 
     assert client.post("/v1/verify", json={"answer": "x"}).status_code == 401
     wrong = client.post("/v1/verify", json={"answer": "x"}, headers={"X-API-Key": "nope"})

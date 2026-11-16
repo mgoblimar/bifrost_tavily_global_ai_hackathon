@@ -1,6 +1,6 @@
 """Example AI application: a chat assistant with a freshness check behind it.
 
-It shows the pattern for adding Fresh Facts to an existing AI feature:
+It shows the pattern for adding Carbon Date to an existing AI feature:
 
     1. Your app asks a model a question, as it does today.
     2. Before showing the answer, it sends the answer to POST /v1/verify.

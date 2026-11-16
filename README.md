@@ -1,7 +1,7 @@
-# Fresh Facts
+# Carbon Date
 
 A freshness check for AI applications, built on **Tavily** and **Bifrost by Maxim AI**
-for the Geek Room Global AI Hackathon 2026.
+for the Geek Room Global AI Hackathon 2026, by Team Jenx.
 
 Send it any AI-generated answer. It finds the time-sensitive claims, re-checks each one
 against the live web, and returns a verdict, the current value, a 0-100 freshness score
@@ -17,14 +17,15 @@ and the sources for every claim.
 **Developers who ship AI features.** A model's knowledge stops at its training date, but
 its answers carry no date. If your assistant, support bot or internal tool states a price,
 a version, a rule or who holds a role, you have no way to know whether that is still true.
-Fresh Facts is one HTTP call between your model and your user.
+Carbon Date is one HTTP call between your model and your user: it tells you how old
+an answer really is.
 
 The briefing agent shows the pattern on a real task: someone preparing for a sales,
 partnership or investor meeting, who needs recent facts and cannot afford a stale one.
 
 ## Add it to your AI app
 
-Your app already has step 1. Fresh Facts is step 2.
+Your app already has step 1. Carbon Date is step 2.
 
 ```python
 answer = my_model(question)                       # 1. your existing model call
@@ -115,7 +116,7 @@ the problem in one example, and it is why the pipeline searches dated news separ
 ```mermaid
 flowchart LR
     X[Your AI app] --> A
-    subgraph App["Fresh Facts"]
+    subgraph App["Carbon Date"]
         A["Verification API<br/>POST /v1/verify"]
         D[Stale-Answer Detector]
         B[Pre-Meeting Briefing app]
@@ -254,7 +255,7 @@ Start the pages (terminal 3) and open http://localhost:8501:
 .venv/Scripts/python -m streamlit run app.py
 ```
 
-To require a key on the API, set `FRESH_FACTS_API_KEY` before starting it; callers then
+To require a key on the API, set `CARBON_DATE_API_KEY` before starting it; callers then
 send it in the `X-API-Key` header. Without it the API is open, so keep it on localhost.
 
 The gateway listens on port 8090 and its dashboard is at http://localhost:8090.
