@@ -4,7 +4,7 @@ Order: title, an overview of the three parts, then the parts each introduced by 
 page, briefing page), a card on where this fits in real AI applications, and a
 closing card. The long waits noted in the cuts files are trimmed out.
 
-Output: demo/carbon-date-demo.mp4
+Output: demo/raw/carbon-date-demo-silent.mp4 (the narrated final cut is edited from it)
 Run after record_terminal and record_browser:   python -m demo.build_video
 """
 
@@ -17,7 +17,7 @@ from playwright.sync_api import sync_playwright
 
 DEMO_DIR = Path(__file__).parent
 RAW_DIR = DEMO_DIR / "raw"
-OUTPUT = DEMO_DIR / "carbon-date-demo.mp4"
+OUTPUT = RAW_DIR / "carbon-date-demo-silent.mp4"  # the narrated final lives in demo/
 WIDTH, HEIGHT, FPS = 1280, 720, 25
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 ENCODE = ["-c:v", "libx264", "-preset", "medium", "-crf", "21", "-pix_fmt", "yuv420p", "-an"]

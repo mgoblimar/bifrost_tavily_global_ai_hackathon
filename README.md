@@ -14,11 +14,13 @@ and the sources for every claim.
 
 ## Demo video
 
-[demo/carbon-date-demo.mp4](demo/carbon-date-demo.mp4) is a two-minute silent, captioned
-recording of real runs in three parts, each introduced by a title card: the API
-(the example chat app in a terminal, then a call in the API docs page), the detector
-page and the briefing page. Waiting time is trimmed and marked as such.
-The scripts in `demo/` re-record it (they need `pip install playwright imageio-ffmpeg`).
+[demo/carbon-date-demo.mp4](demo/carbon-date-demo.mp4) is a narrated walkthrough, a little
+over two minutes long, of real runs in three parts: the API (the example chat app in a
+terminal, then a call in the API docs page), the Stale-Answer Detector page and the
+Pre-Meeting Briefing page. Waiting time is trimmed and marked as such on screen.
+
+The scripts in `demo/` produce the silent screen recording it is built from (they need
+`pip install playwright imageio-ffmpeg`); the narration and music were added afterwards.
 
 ## Who it is for
 
@@ -221,59 +223,179 @@ Run of 2026-11-16 ([eval/results.md](eval/results.md)):
 This is a small set labelled by one person, and one label was corrected after the run
 (the Nvidia example above), so read it as a sanity check, not a benchmark.
 
-## Setup
+## Run it yourself
 
-Requirements: Python 3.12+, Node.js 20+ (to run Bifrost with `npx`), and free API keys
-for [Tavily](https://tavily.com), [Groq](https://console.groq.com) and
-[Google AI Studio](https://aistudio.google.com).
+Carbon Date runs on your own machine. Setup takes about ten minutes and uses only
+free-tier accounts. Three programs run side by side, each in its own terminal:
+
+| Program | Port | What it does |
+|---|---|---|
+| Bifrost gateway | 8090 | Holds the model provider keys and routes every model call |
+| Carbon Date API | 8600 | `POST /v1/verify`, the check other apps call |
+| Web pages | 8501 | The Stale-Answer Detector and Pre-Meeting Briefing pages |
+
+The steps below were run on Windows 11. The macOS and Linux commands are the standard
+equivalents and have not been tested by us.
+
+### 1. What you need
+
+- **Python 3.12 or newer** and **Node.js 20 or newer** (Node runs the Bifrost gateway through `npx`).
+- **Three free API keys:**
+
+| Key | Where to get it | Used for |
+|---|---|---|
+| Tavily | https://tavily.com | Live web search |
+| Groq | https://console.groq.com | The fast model that extracts claims |
+| Gemini | https://aistudio.google.com | The stronger model that verifies and drafts |
+
+### 2. Download and install
 
 ```bash
 git clone https://github.com/mgoblimar/bifrost_tavily_global_ai_hackathon.git
 cd bifrost_tavily_global_ai_hackathon
 python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt    # Windows
-# .venv/bin/python -m pip install -r requirements.txt      # macOS / Linux
 ```
 
-Copy `.env.example` to `.env` and fill in:
+Then install the dependencies. On Windows:
 
-| Variable | Value |
+```bash
+.venv/Scripts/python -m pip install -r requirements.txt
+```
+
+On macOS or Linux:
+
+```bash
+.venv/bin/python -m pip install -r requirements.txt
+```
+
+In the rest of this guide, replace `.venv/Scripts/python` with `.venv/bin/python` on
+macOS or Linux.
+
+### 3. Add your keys
+
+Copy `.env.example` to a new file named `.env` in the same folder and fill in these five
+values. `.env` is git-ignored, so your keys stay on your machine.
+
+| Variable | What to put |
 |---|---|
-| `GROQ_API_KEY`, `GEMINI_API_KEY` | Your provider keys (read by Bifrost only) |
+| `GROQ_API_KEY` | Your Groq key |
+| `GEMINI_API_KEY` | Your Gemini key |
 | `TAVILY_API_KEY` | Your Tavily key |
-| `BIFROST_VIRTUAL_KEY` | Any secret you choose, starting with `sk-bf-` |
-| `BIFROST_SETUP_TOKEN` | Any secret you choose; used once to create the Bifrost dashboard admin |
+| `BIFROST_VIRTUAL_KEY` | A secret you make up, starting with `sk-bf-`, for example `sk-bf-` followed by 32 random characters. The app uses it to identify itself to the gateway. |
+| `BIFROST_SETUP_TOKEN` | Another secret you make up. Used once, to create the gateway's dashboard login. |
 
-Each variable must appear only once in the file.
+Leave the other lines (`BIFROST_URL` and the four model names) as they are.
+Each variable must appear **only once** in the file; a duplicate silently overrides the first.
 
-Start the gateway (terminal 1). On Windows:
+### 4. Start the Bifrost gateway (terminal 1)
+
+On Windows:
 
 ```bash
 powershell -ExecutionPolicy Bypass -File scripts/start_bifrost.ps1
 ```
 
-On macOS / Linux, export the variables from `.env` and run:
+On macOS or Linux:
 
 ```bash
-npx -y @maximhq/bifrost -app-dir ./bifrost -port 8090
+set -a && . ./.env && set +a && npx -y @maximhq/bifrost -app-dir ./bifrost -port 8090
 ```
 
-Start the verification API (terminal 2). Interactive docs are at http://localhost:8600/docs:
+The first start downloads the gateway and takes about a minute. It is ready when this
+returns a healthy status:
+
+```bash
+curl http://localhost:8090/health
+```
+
+### 5. Start the Carbon Date API (terminal 2)
 
 ```bash
 .venv/Scripts/python -m uvicorn api:app --port 8600
 ```
 
-Start the pages (terminal 3) and open http://localhost:8501:
+Check it:
+
+```bash
+curl http://localhost:8600/health
+```
+
+You should see `{"status":"ok"}`. Interactive API docs are at http://localhost:8600/docs.
+
+### 6. Start the web pages (terminal 3)
 
 ```bash
 .venv/Scripts/python -m streamlit run app.py
 ```
 
-To require a key on the API, set `CARBON_DATE_API_KEY` before starting it; callers then
-send it in the `X-API-Key` header. Without it the API is open, so keep it on localhost.
+Open http://localhost:8501.
 
-The gateway listens on port 8090 and its dashboard is at http://localhost:8090.
+### 7. Try the three ways to use it
+
+**The API, from the example chat app.** In a fourth terminal:
+
+```bash
+.venv/Scripts/python -m examples.guarded_chat "Who is the CEO of Nvidia, and what is the latest stable version of Python?"
+```
+
+It prints the model's answer, then a freshness check listing any claims that are out of
+date, with the current value and a source for each.
+
+**The API, directly.** Open http://localhost:8600/docs, expand `POST /v1/verify`, choose
+"Try it out", and send:
+
+```json
+{"answer": "The latest stable Python release is 3.12, and Node.js 18 is the current LTS version."}
+```
+
+**The Stale-Answer Detector page.** At http://localhost:8501, open "Stale-Answer
+Detector" and choose "Check freshness". The box is pre-filled with a sample answer.
+
+**The Pre-Meeting Briefing page.** Open "Pre-Meeting Briefing", enter a company such as
+`Nvidia`, optionally paste talking points and a trusted site such as `nvidia.com`, and
+choose "Build briefing".
+
+A detector run takes 20 to 60 seconds and a briefing one to two minutes, because each
+does several live searches and model calls.
+
+### What a run costs
+
+Everything fits in the free tiers, but they are finite:
+
+- A detector run uses about 18 Tavily credits; a briefing uses 30 to 60.
+- Gemini's free tier has a daily request limit. When it runs out, calls fall back to Groq
+  and runs get slower until the limit resets.
+- The gateway caps paid spend for the app's virtual key at 5 US dollars a month
+  (set in [bifrost/config.json](bifrost/config.json)).
+
+### Troubleshooting
+
+These are the problems we hit ourselves.
+
+| What you see | Cause | Fix |
+|---|---|---|
+| The gateway exits with "failed to create listener" | Port 8090 is already in use | Change `-port` in the start command and `BIFROST_URL` in `.env` to a free port |
+| The start script says a variable "is empty in .env" | A key is missing, or the variable appears twice with an empty copy | Fill it in, and make sure each variable appears once |
+| "virtual key is required" (HTTP 401) | `BIFROST_VIRTUAL_KEY` was changed after the gateway started | Restart the gateway |
+| "Model ... is not allowed for virtual key" (HTTP 403) | The provider has retired that model | List current models (command below) and update the four model names in `.env` |
+| "Both model providers are rate-limited" | Free-tier limits on Groq and Gemini were hit together | Wait a minute and try again |
+| "Cannot reach the Bifrost gateway" | The gateway is not running | Start it (step 4) |
+| Items marked "could not cross-check" in a briefing | A rate limit during the cross-check | The briefing keeps the drafted status; run it again later |
+| The gateway dashboard asks for a setup token | First visit to http://localhost:8090 | Enter your `BIFROST_SETUP_TOKEN`, then create an admin account |
+
+To list the models your gateway can reach, with your virtual key in place of `sk-bf-...`:
+
+```bash
+curl -H "x-bf-vk: sk-bf-..." http://localhost:8090/v1/models
+```
+
+To require a key on the Carbon Date API, set `CARBON_DATE_API_KEY` before starting it;
+callers then send it in the `X-API-Key` header. Without it the API is open, so keep it
+on localhost.
+
+### Stopping
+
+Press Ctrl+C in each terminal. Nothing keeps running in the background.
 
 ### Tests
 
@@ -282,7 +404,8 @@ The gateway listens on port 8090 and its dashboard is at http://localhost:8090.
 ```
 
 70 unit tests cover scoring, both pipelines, the API, trusted-site handling, the
-gateway client and the Markdown renderer, with the gateway and the web faked. They need no keys.
+gateway client and the Markdown renderer, with the gateway and the web faked. They need
+no keys and no running servers.
 
 ## Project layout
 
@@ -297,6 +420,7 @@ briefing/                  Research window, drafting, cross-check, talking point
 eval/                      Labelled claims, eval runner, latest results
 bifrost/config.json        Providers, virtual key and budget for the gateway
 scripts/start_bifrost.ps1  Loads .env and starts Bifrost
+demo/                      Demo video and the scripts that record it
 tests/                     Unit tests
 ```
 
