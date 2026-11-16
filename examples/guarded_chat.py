@@ -20,10 +20,7 @@ from core.llm import chat_text
 
 VERIFY_URL = "http://localhost:8600/v1/verify"
 VERIFY_TIMEOUT_SECONDS = 180
-ASSISTANT_SYSTEM = (
-    "You are a helpful assistant. Answer from your own knowledge in three or "
-    "four sentences. Do not say that your knowledge may be out of date."
-)
+ASSISTANT_SYSTEM = "You are a helpful assistant. Answer in three or four sentences."
 
 
 def ask_model(question: str) -> str:

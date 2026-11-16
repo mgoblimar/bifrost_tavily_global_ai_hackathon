@@ -14,9 +14,10 @@ and the sources for every claim.
 
 ## Demo video
 
-[demo/carbon-date-demo.mp4](demo/carbon-date-demo.mp4) is a 100-second silent, captioned
-recording of real runs: the example chat app in a terminal, a call to the API, the
-detector page and the briefing page. Waiting time is trimmed and marked as such.
+[demo/carbon-date-demo.mp4](demo/carbon-date-demo.mp4) is a two-minute silent, captioned
+recording of real runs in three parts, each introduced by a title card: the API
+(the example chat app in a terminal, then a call in the API docs page), the detector
+page and the briefing page. Waiting time is trimmed and marked as such.
 The scripts in `demo/` re-record it (they need `pip install playwright imageio-ffmpeg`).
 
 ## Who it is for
@@ -26,6 +27,10 @@ its answers carry no date. If your assistant, support bot or internal tool state
 a version, a rule or who holds a role, you have no way to know whether that is still true.
 Carbon Date is one HTTP call between your model and your user: it tells you how old
 an answer really is.
+
+It matters most for apps that answer **without live web search**: custom assistants,
+support bots, tools that answer from stored documents, and smaller or older models.
+Chat products with search switched on usually get recent facts right on their own.
 
 The briefing agent shows the pattern on a real task: someone preparing for a sales,
 partnership or investor meeting, who needs recent facts and cannot afford a stale one.
@@ -82,20 +87,23 @@ Response, shortened:
 this. A real run on 16 November 2026:
 
 ```text
-$ python -m examples.guarded_chat "Who is the CEO of Nvidia and what is their newest data centre GPU?"
+$ python -m examples.guarded_chat "Who is the CEO of Nvidia, and what is the latest stable version of Python?"
 
 ASSISTANT:
-The current CEO of NVIDIA is Jensen Huang. Their latest data-centre GPU is the
-NVIDIA H100 Tensor Core GPU, based on the Hopper architecture...
+The current CEO of Nvidia is Jensen Huang. The most recent stable release of the
+Python programming language is Python 3.12.4, which was finalized in mid-2024...
 
-FRESHNESS CHECK: 2 of 2 claims are out of date.
-  - Said: The current CEO of NVIDIA is Jensen Huang
-    Now:  Colette Kress (Interim CEO)
-    Source: https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-CEO-Transition
-  - Said: The latest data-centre GPU from NVIDIA is the H100 Tensor Core GPU
-    Now:  Vera Rubin and Blackwell architecture GPUs
-    Source: https://intuitionlabs.ai/articles/nvidia-data-center-gpu-specs
+FRESHNESS CHECK: 3 of 4 claims are out of date.
+  - Said: The current CEO of Nvidia is Jensen Huang
+    Now:  Colette Kress (interim CEO)
+    Source: https://nvidianews.nvidia.com/news/nvidia-announces-ceo-transition
+  - Said: The most recent stable release of the Python programming language is Python 3.12.4
+    Now:  Python 3.15.x (e.g., Python 3.15.2)
+    Source: https://en.wikipedia.org/wiki/Python_(programming_language)
+  ...
 ```
+
+The model was given no instruction about hedging; it stated both facts without a caveat.
 
 Two options sharpen the check:
 
