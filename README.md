@@ -10,6 +10,26 @@ It addresses two Tavily problem statements with one shared engine:
 | **Stale-Answer Detector** | 06 | Takes an AI-generated answer, finds the time-sensitive claims, re-checks each against the live web and gives every claim a 0-100 freshness score. |
 | **Pre-Meeting Briefing** | 05 | Takes a company or person and a meeting time, researches the previous 30 days and produces a one-page, sourced briefing. Every item is then re-checked by the detector, so verified developments are separated from uncertain or disputed ones. |
 
+## Who it is for
+
+The owner of a small B2B distributor who also does the selling. They prepare for
+account meetings in spare minutes, often by asking an AI chatbot, and cannot tell
+which of its facts have expired. The worked example is a healthcare distributor
+visiting hospitals, where a director who left, a product recall or a changed rule
+can cost credibility in the room. This persona is a scenario built from public
+knowledge of how such businesses work, not a validated customer study, and the
+tools work for any B2B seller.
+
+Two features exist for this person:
+
+- **Check my talking points.** Paste what you or a chatbot drafted for the meeting.
+  Anything no longer true about the account is flagged before you say it.
+- **Official sources first.** Name the sites you trust, such as a regulator or the
+  company's own site (a Philippine health regulator preset is included). They are
+  searched first, and every verdict is labelled as resting on an official source,
+  dated news or undated web pages. The label says where a verdict came from; it
+  does not settle regulatory questions.
+
 ## Why
 
 Language models state outdated facts with full confidence: a price that changed, a
@@ -51,7 +71,8 @@ flowchart LR
    versions, laws, who holds a role, statistics) and writes a search query for the
    *current* state of each.
 2. **Live verification.** Tavily runs two searches per claim: a general search for
-   relevance and a news search over the last year for dated evidence.
+   relevance and a news search over the last year for dated evidence. If you named
+   trusted sites, a third search covers only those and its results are listed first.
 3. **Freshness detection.** A stronger model judges each claim using only those
    sources: `current`, `outdated`, `contradicted` or `unverifiable`. It may not call a
    claim current on the strength of an old report of a past event.
@@ -73,14 +94,16 @@ flowchart LR
 4. **Verified vs uncertain.** Each development is re-verified by the detector with a
    fresh search. Confirmed items stay verified, contradicted ones become disputed, and
    ones a second search cannot confirm are downgraded to uncertain.
-5. **One page out.** Shown in the app and downloadable as Markdown.
+5. **Talking points.** If you pasted talking points, the detector checks them with
+   the account as context and marks the ones you should not say.
+6. **One page out.** Shown in the app and downloadable as Markdown.
 
 ## How each technology contributes
 
 **Tavily** is the only source of facts. Models are instructed to use nothing but the
 numbered Tavily results, and every claim and briefing item links back to them.
-The project uses general search, news search with a `days` window, and news search
-with explicit `start_date` / `end_date`.
+The project uses general search, news search with a `days` window, news search
+with explicit `start_date` / `end_date`, and `include_domains` for official sites.
 
 **Bifrost** is the only path to a model. The app never holds a provider key.
 
@@ -162,17 +185,17 @@ The gateway listens on port 8090 and its dashboard is at http://localhost:8090.
 .venv/Scripts/python -m pytest -q
 ```
 
-49 unit tests cover scoring, both pipelines, the gateway client and the Markdown
-renderer, with the gateway and the web faked. They need no keys.
+59 unit tests cover scoring, both pipelines, trusted-site handling, the gateway
+client and the Markdown renderer, with the gateway and the web faked. They need no keys.
 
 ## Project layout
 
 ```
 app.py                     Streamlit home page
 pages/                     The two tool pages
-core/                      Shared: settings, Bifrost chat client, Tavily search client
-stale_detector/            Claim extraction, verification, freshness scoring
-briefing/                  Research window, drafting, cross-check, Markdown rendering
+core/                      Shared: settings, Bifrost chat client, Tavily search client, trusted sites
+stale_detector/            Claim extraction, verification, freshness scoring, shared UI pieces
+briefing/                  Research window, drafting, cross-check, talking points, Markdown rendering
 eval/                      Labelled claims, eval runner, latest results
 bifrost/config.json        Providers, virtual key and budget for the gateway
 scripts/start_bifrost.ps1  Loads .env and starts Bifrost
@@ -190,6 +213,8 @@ Python 3.12, Streamlit, Tavily Search API (`tavily-python`), Bifrost gateway v2.
   once the app retries twice, then marks the item as not checked instead of guessing.
 - Verdicts are only as good as what Tavily returns. General search results carry no
   publish date, which is why dated news is searched separately.
+- An undated official page can lag behind events. The verifier is told that several
+  recent dated reports of a change outrank it, but this relies on the model's judgement.
 - The detector checks at most 6 claims per answer and the briefing at most 5
   developments, to keep runs fast and cheap.
 - The briefing is not disambiguated automatically: for a common name, add a focus

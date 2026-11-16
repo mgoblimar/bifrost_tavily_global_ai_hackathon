@@ -12,10 +12,10 @@ from datetime import date, timedelta
 from briefing.models import Briefing, Development, MeetingRequest, Status
 from briefing.prompts import DRAFT_SYSTEM
 from core.config import Settings
-from core.llm import LLMCall, chat_json
+from core.llm import LLMCall, LLMError, chat_json
 from core.search import SearchError, Source, search_web
-from stale_detector.models import Claim, Verdict
-from stale_detector.pipeline import check_claim
+from stale_detector.models import Claim, Report, Verdict
+from stale_detector.pipeline import analyze, check_claim
 
 WINDOW_DAYS = 30
 RESULTS_PER_QUERY = 6
@@ -151,7 +151,11 @@ def to_development(raw: object, source_count: int) -> Development | None:
 
 
 def cross_check(
-    settings: Settings, subject: str, item: Development, today: date
+    settings: Settings,
+    subject: str,
+    item: Development,
+    today: date,
+    trusted_domains: tuple[str, ...] = (),
 ) -> tuple[Development, LLMCall | None, str | None]:
     """Re-verify one drafted item with the stale-answer detector."""
     statement = f"{item.headline}. {item.detail}".strip()
@@ -160,7 +164,7 @@ def cross_check(
         category=item.category,
         search_query=f"{subject} {item.headline}",
     )
-    result, call, warning = check_claim(settings, claim, today)
+    result, call, warning = check_claim(settings, claim, today, trusted_domains)
     if warning is not None:
         # The check itself failed (search or model error). That says nothing
         # about the item, so keep the drafted status and report the failure.
@@ -184,6 +188,29 @@ def cross_check(
     return replace(checked, freshness_score=result.freshness_score), call, warning
 
 
+def check_talking_points(
+    settings: Settings, request: MeetingRequest, today: date
+) -> tuple[Report | None, tuple[str, ...]]:
+    """Run the user's own talking points through the stale-answer detector."""
+    if not request.talking_points.strip():
+        return None, ()
+    context = (
+        f"These are talking points for a meeting with {request.subject}. "
+        f"Prioritise claims about {request.subject} and name them in each search query."
+    )
+    try:
+        report = analyze(
+            settings,
+            request.talking_points,
+            today,
+            request.trusted_domains,
+            context,
+        )
+    except LLMError as exc:
+        return None, (f"Could not check your talking points: {exc}",)
+    return report, ()
+
+
 def build_briefing(
     settings: Settings,
     request: MeetingRequest,
@@ -194,6 +221,8 @@ def build_briefing(
     today = today or date.today()
     window_start, window_end = research_window(request.meeting_time.date(), today)
     sources, warnings = research(settings, request.subject, window_start, window_end)
+    talking_points, talking_warnings = check_talking_points(settings, request, today)
+    warnings += talking_warnings
 
     if not sources:
         return Briefing(
@@ -206,6 +235,7 @@ def build_briefing(
             sources=(),
             calls=(),
             warnings=warnings,
+            talking_points=talking_points,
         )
 
     summary, developments, questions, draft_call = draft(
@@ -217,7 +247,9 @@ def build_briefing(
         with ThreadPoolExecutor(max_workers=PARALLEL_CHECKS) as pool:
             outcomes = list(
                 pool.map(
-                    lambda item: cross_check(settings, request.subject, item, today),
+                    lambda item: cross_check(
+                        settings, request.subject, item, today, request.trusted_domains
+                    ),
                     developments,
                 )
             )
@@ -235,4 +267,5 @@ def build_briefing(
         sources=sources,
         calls=calls,
         warnings=warnings,
+        talking_points=talking_points,
     )

@@ -1,11 +1,13 @@
 """Stale-answer detection: extract claims -> search live -> verify -> score."""
 
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import date
 
 from core.config import Settings
 from core.llm import LLMCall, LLMError, chat_json
 from core.search import SearchError, Source, search_web
+from core.trusted import is_trusted
 from stale_detector.models import Claim, ClaimResult, Report, Verdict, Verification
 from stale_detector.prompts import EXTRACT_SYSTEM, VERIFY_SYSTEM
 from stale_detector.scoring import freshness_score, overall_score
@@ -15,17 +17,19 @@ MAX_ANSWER_CHARS = 8000
 SOURCES_PER_CLAIM = 5
 NEWS_SOURCES_PER_CLAIM = 4
 NEWS_WINDOW_DAYS = 365
+OFFICIAL_SOURCES_PER_CLAIM = 3
 PARALLEL_CLAIMS = 3
 
 
 def extract_claims(
-    settings: Settings, answer: str, today: date
+    settings: Settings, answer: str, today: date, context: str = ""
 ) -> tuple[tuple[Claim, ...], LLMCall]:
     """Step 1 (fast model): pull out the time-sensitive claims."""
     system = (
         EXTRACT_SYSTEM.replace("{max_claims}", str(MAX_CLAIMS))
         .replace("{today}", today.isoformat())
         .replace("{year}", str(today.year))
+        .replace("{context}", f"Context: {context}\n" if context else "")
     )
     parsed, call = chat_json(
         settings.bifrost_url,
@@ -72,8 +76,9 @@ def _format_sources(sources: tuple[Source, ...]) -> str:
     lines = []
     for number, source in enumerate(sources, start=1):
         published = source.published.isoformat() if source.published else "unknown"
+        official = " [OFFICIAL SOURCE]" if source.official else ""
         lines.append(
-            f"[{number}] {source.title} (published: {published})\n"
+            f"[{number}]{official} {source.title} (published: {published})\n"
             f"URL: {source.url}\n{source.snippet}"
         )
     return "\n\n".join(lines)
@@ -104,12 +109,16 @@ def _to_verification(parsed: dict, sources: tuple[Source, ...]) -> Verification:
     )
 
 
-def gather_sources(settings: Settings, claim: Claim) -> tuple[Source, ...]:
-    """Step 2: general web results plus dated news from the last year.
+def gather_sources(
+    settings: Settings, claim: Claim, trusted_domains: tuple[str, ...] = ()
+) -> tuple[Source, ...]:
+    """Step 2: official sites first, then general web results and dated news.
 
     General results are the most relevant but carry no publish date, so on their
     own the verifier cannot tell an old article from a new one. The news search
-    adds dated evidence. It is best-effort: if it fails we keep the general results.
+    adds dated evidence. When the user names trusted sites, those are searched
+    too and listed first. Both extra searches are best-effort: if one fails we
+    keep the general results.
     """
     general = search_web(
         settings.tavily_api_key, claim.search_query, SOURCES_PER_CLAIM
@@ -124,17 +133,37 @@ def gather_sources(settings: Settings, claim: Claim) -> tuple[Source, ...]:
         )
     except SearchError:
         news = ()
-    seen = {source.url for source in general}
-    fresh_news = tuple(source for source in news if source.url not in seen)
-    return general + fresh_news
+    official: tuple[Source, ...] = ()
+    if trusted_domains:
+        try:
+            official = search_web(
+                settings.tavily_api_key,
+                claim.search_query,
+                OFFICIAL_SOURCES_PER_CLAIM,
+                depth="basic",
+                include_domains=trusted_domains,
+            )
+        except SearchError:
+            official = ()
+
+    merged: dict[str, Source] = {}
+    for source in official + general + news:
+        merged.setdefault(source.url, source)
+    return tuple(
+        replace(source, official=is_trusted(source.url, trusted_domains))
+        for source in merged.values()
+    )
 
 
 def check_claim(
-    settings: Settings, claim: Claim, today: date
+    settings: Settings,
+    claim: Claim,
+    today: date,
+    trusted_domains: tuple[str, ...] = (),
 ) -> tuple[ClaimResult, LLMCall | None, str | None]:
     """Steps 2-4 for one claim. A failure degrades to 'unverifiable', never a crash."""
     try:
-        sources = gather_sources(settings, claim)
+        sources = gather_sources(settings, claim, trusted_domains)
     except SearchError as exc:
         return _unverifiable(claim, (), "Live search failed."), None, str(exc)
 
@@ -161,13 +190,25 @@ def _unverifiable(
     return ClaimResult(claim, verification, sources, score)
 
 
-def analyze(settings: Settings, answer: str, today: date | None = None) -> Report:
-    """Run the full pipeline on one AI-generated answer."""
+def analyze(
+    settings: Settings,
+    answer: str,
+    today: date | None = None,
+    trusted_domains: tuple[str, ...] = (),
+    context: str = "",
+) -> Report:
+    """Run the full pipeline on one piece of text.
+
+    `trusted_domains` are official sites to search first. `context` tells the
+    extractor what the text is for, such as talking points for a meeting.
+    """
     today = today or date.today()
-    claims, extract_call = extract_claims(settings, answer, today)
+    claims, extract_call = extract_claims(settings, answer, today, context)
 
     with ThreadPoolExecutor(max_workers=PARALLEL_CLAIMS) as pool:
-        outcomes = list(pool.map(lambda c: check_claim(settings, c, today), claims))
+        outcomes = list(
+            pool.map(lambda c: check_claim(settings, c, today, trusted_domains), claims)
+        )
 
     results = tuple(result for result, _, _ in outcomes)
     calls = (extract_call,) + tuple(call for _, call, _ in outcomes if call)

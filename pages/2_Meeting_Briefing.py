@@ -9,6 +9,8 @@ from briefing.pipeline import WINDOW_DAYS, build_briefing
 from briefing.render import to_markdown
 from core.config import ConfigError, load_settings
 from core.llm import LLMError
+from stale_detector.models import Verdict
+from stale_detector.view import render_claim, render_gateway, trusted_sites_input
 
 PURPOSES = (
     "Sales call",
@@ -47,29 +49,27 @@ def render_development(item: Development, briefing: Briefing) -> None:
             st.markdown(f"[{number}] [{source.title}]({source.url}) · {published}")
 
 
-def render_gateway(briefing: Briefing) -> None:
-    if not briefing.calls:
+def render_talking_points(briefing: Briefing) -> None:
+    report = briefing.talking_points
+    if report is None:
         return
-    with st.expander("Gateway activity (Bifrost)"):
-        tokens = sum(c.prompt_tokens + c.completion_tokens for c in briefing.calls)
-        fallbacks = sum(1 for c in briefing.calls if c.is_fallback)
-        col_calls, col_tokens, col_fallbacks = st.columns(3)
-        col_calls.metric("Model calls", len(briefing.calls))
-        col_tokens.metric("Total tokens", f"{tokens:,}")
-        col_fallbacks.metric("Fallbacks used", fallbacks)
-        st.dataframe(
-            [
-                {
-                    "Step": "Draft briefing" if index == 0 else "Cross-check item",
-                    "Requested": call.requested_model,
-                    "Served by": call.served_by,
-                    "Fallback": "yes" if call.is_fallback else "no",
-                }
-                for index, call in enumerate(briefing.calls)
-            ],
-            hide_index=True,
-            use_container_width=True,
-        )
+    st.markdown("#### Your talking points, checked")
+    if not report.results:
+        st.success("No time-sensitive claims were found in your talking points.")
+        return
+    stale = sum(
+        1
+        for r in report.results
+        if r.verification.verdict in (Verdict.OUTDATED, Verdict.CONTRADICTED)
+    )
+    if stale:
+        st.error(f"{stale} of your talking points are out of date. Fix them before the meeting.")
+    else:
+        st.success("Nothing in your talking points was found to be out of date.")
+    for warning in report.warnings:
+        st.warning(warning)
+    for result in sorted(report.results, key=lambda r: r.freshness_score):
+        render_claim(result)
 
 
 def render_briefing(briefing: Briefing) -> None:
@@ -98,6 +98,8 @@ def render_briefing(briefing: Briefing) -> None:
         for item in other:
             render_development(item, briefing)
 
+    render_talking_points(briefing)
+
     if briefing.open_questions:
         st.markdown("#### Open questions for the meeting")
         for question in briefing.open_questions:
@@ -117,13 +119,15 @@ def render_briefing(briefing: Briefing) -> None:
         file_name=f"briefing-{request.subject.lower().replace(' ', '-')}.md",
         mime="text/markdown",
     )
-    render_gateway(briefing)
+    calls = briefing.calls + (briefing.talking_points.calls if briefing.talking_points else ())
+    render_gateway(calls, "Draft briefing", "Cross-check")
 
 
 st.title("Pre-Meeting Briefing")
 st.caption(
     f"Enter who you are meeting and when. You get a one-page briefing on the last "
-    f"{WINDOW_DAYS} days, with every item sourced and cross-checked against a fresh search."
+    f"{WINDOW_DAYS} days, with every item sourced and cross-checked. Paste your talking "
+    "points to have them checked too."
 )
 
 with st.form("briefing_form"):
@@ -136,6 +140,13 @@ with st.form("briefing_form"):
         "Anything specific to focus on? (optional)",
         placeholder="e.g. their data-centre products, or which Nvidia if the name is ambiguous",
     )
+    talking_points = st.text_area(
+        "Your talking points (optional)",
+        placeholder="Paste what you or an AI chatbot drafted for this meeting. "
+        "Anything that is no longer true will be flagged.",
+        height=120,
+    )
+    trusted_domains = trusted_sites_input("briefing")
     verify = st.checkbox("Cross-check each item with a second search (slower)", value=True)
     submitted = st.form_submit_button("Build briefing", type="primary")
 
@@ -148,6 +159,8 @@ if submitted:
         meeting_time=datetime.combine(meeting_date, meeting_clock),
         purpose=purpose,
         notes=notes.strip(),
+        talking_points=talking_points.strip(),
+        trusted_domains=trusted_domains,
     )
     try:
         settings = load_settings()

@@ -2,7 +2,7 @@
 
 EXTRACT_SYSTEM = """You audit AI-generated answers for facts that may have gone out of date.
 Today's date is {today}.
-
+{context}
 Extract the factual claims that are TIME-SENSITIVE: things that change over time, such as
 prices and plans, software/API/model versions, laws and regulations, who holds a role,
 statistics, rankings, availability, deadlines, and "latest/newest/currently" statements.
@@ -33,6 +33,12 @@ Verdicts:
   to the current state of the fact.
 
 Judge the claim as a whole. If any part of it is no longer true, the verdict is "outdated".
+
+Sources marked [OFFICIAL SOURCE] come from sites the user trusts as authoritative, such as a
+regulator or the organisation's own site. When one speaks to the claim, cite it, and prefer it
+over other pages and over news of the same age or older. One exception: an undated official
+page may simply not have been updated yet, so several recent dated reports of a change
+outrank it.
 
 Dates matter more than anything else here:
 - A recent source outranks an old or undated one when they disagree.

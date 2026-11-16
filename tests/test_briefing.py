@@ -8,7 +8,7 @@ from briefing.render import to_markdown
 from core.config import ModelRoute, Settings
 from core.llm import LLMCall
 from core.search import SearchError, Source
-from stale_detector.models import Claim, ClaimResult, Verdict, Verification
+from stale_detector.models import Claim, ClaimResult, Report, Verdict, Verification
 
 TODAY = date(2026, 11, 16)
 SETTINGS = Settings(
@@ -72,7 +72,7 @@ def install(monkeypatch, sources=(RECENT, OLDER), draft=DRAFT, verdict=Verdict.C
     def fake_chat_json(_url, _virtual_key, _route, _system, _user):
         return draft, fake_call()
 
-    def fake_check_claim(_settings, claim: Claim, _today):
+    def fake_check_claim(_settings, claim: Claim, _today, _trusted_domains=()):
         verification = Verification(verdict, 0.9, "fresh search says so", "", ())
         return ClaimResult(claim, verification, (), 80), fake_call(), None
 
@@ -148,7 +148,7 @@ def test_verified_item_the_cross_check_cannot_confirm_becomes_uncertain(monkeypa
 def test_failed_cross_check_keeps_the_drafted_status_and_warns(monkeypatch):
     install(monkeypatch)
 
-    def failing_check(_settings, claim: Claim, _today):
+    def failing_check(_settings, claim: Claim, _today, _trusted_domains=()):
         verification = Verification(Verdict.UNVERIFIABLE, 0.0, "failed", "", ())
         return ClaimResult(claim, verification, (), 50), None, "gateway down"
 
@@ -199,3 +199,54 @@ def test_markdown_separates_verified_from_uncertain_and_lists_sources(monkeypatc
     assert "**Acme launches X** (2026-11-16) [1][2]" in text
     assert "## Open questions for the meeting" in text
     assert "1. [Acme launches X](https://a.example/1) (2026-11-16)" in text
+
+
+def stale_report() -> Report:
+    claim = Claim("Acme's CEO is Jo Old.", "leadership", "Acme CEO")
+    verification = Verification(Verdict.OUTDATED, 0.9, "Replaced in October.", "Sam New", ())
+    return Report((ClaimResult(claim, verification, (), 15),), 15, (), ())
+
+
+def test_talking_points_are_checked_with_the_subject_as_context(monkeypatch):
+    install(monkeypatch)
+    seen = {}
+
+    def fake_analyze(_settings, text, _today, trusted_domains, context):
+        seen.update(text=text, trusted=trusted_domains, context=context)
+        return stale_report()
+
+    monkeypatch.setattr(pipeline, "analyze", fake_analyze)
+    request = MeetingRequest(
+        subject="Acme Corp",
+        meeting_time=REQUEST.meeting_time,
+        purpose="Sales call",
+        talking_points="Congratulate CEO Jo Old.",
+        trusted_domains=("acme.example",),
+    )
+
+    briefing = pipeline.build_briefing(SETTINGS, request, TODAY)
+
+    assert briefing.talking_points == stale_report()
+    assert seen["text"] == "Congratulate CEO Jo Old."
+    assert seen["trusted"] == ("acme.example",)
+    assert "Acme Corp" in seen["context"]
+
+
+def test_no_talking_points_means_no_check(monkeypatch):
+    install(monkeypatch)
+
+    assert pipeline.build_briefing(SETTINGS, REQUEST, TODAY).talking_points is None
+
+
+def test_stale_talking_point_is_flagged_in_the_markdown(monkeypatch):
+    install(monkeypatch)
+    monkeypatch.setattr(pipeline, "analyze", lambda *_args: stale_report())
+    request = MeetingRequest(
+        "Acme Corp", REQUEST.meeting_time, "Sales call", talking_points="x"
+    )
+
+    text = to_markdown(pipeline.build_briefing(SETTINGS, request, TODAY))
+
+    assert "## Your talking points, checked" in text
+    assert "- **Do not say this:** Acme's CEO is Jo Old." in text
+    assert "Now: Sam New" in text

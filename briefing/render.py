@@ -1,6 +1,7 @@
 """Render a briefing as a one-page Markdown document."""
 
 from briefing.models import Briefing, Development, Status
+from stale_detector.models import Report, Verdict, evidence_basis
 
 STATUS_LABEL = {
     Status.VERIFIED: "Verified",
@@ -29,6 +30,9 @@ def to_markdown(briefing: Briefing) -> str:
     lines += _section("Verified developments", confirmed)
     lines += _section("Uncertain or disputed: check before relying on these", other)
 
+    if briefing.talking_points is not None:
+        lines += _talking_points(briefing.talking_points)
+
     if briefing.open_questions:
         lines += ["## Open questions for the meeting", ""]
         lines += [f"- {question}" for question in briefing.open_questions]
@@ -41,6 +45,25 @@ def to_markdown(briefing: Briefing) -> str:
             lines.append(f"{number}. [{source.title}]({source.url}) ({published})")
         lines.append("")
     return "\n".join(lines)
+
+
+def _talking_points(report: Report) -> list[str]:
+    lines = ["## Your talking points, checked", ""]
+    if not report.results:
+        return lines + ["No time-sensitive claims were found in your talking points.", ""]
+    for result in sorted(report.results, key=lambda r: r.freshness_score):
+        verification = result.verification
+        stale = verification.verdict in (Verdict.OUTDATED, Verdict.CONTRADICTED)
+        marker = "Do not say this" if stale else verification.verdict.value.capitalize()
+        lines.append(f"- **{marker}:** {result.claim.text}  ")
+        if verification.current_value:
+            lines.append(f"  Now: {verification.current_value}  ")
+        lines.append(
+            f"  _Freshness {result.freshness_score}/100, based on: "
+            f"{evidence_basis(result).lower()}_"
+        )
+    lines.append("")
+    return lines
 
 
 def _section(title: str, items: list[Development]) -> list[str]:

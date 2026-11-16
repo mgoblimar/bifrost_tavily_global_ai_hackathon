@@ -19,6 +19,7 @@ class Source:
     url: str
     snippet: str
     published: date | None
+    official: bool = False
 
 
 def search_web(
@@ -29,11 +30,13 @@ def search_web(
     depth: str = "advanced",
     start_date: date | None = None,
     end_date: date | None = None,
+    include_domains: tuple[str, ...] = (),
 ) -> tuple[Source, ...]:
     """Search the live web.
 
-    Pass `days` to search recent news only. News results carry a publish date;
-    general results usually do not.
+    Pass `days`, or `start_date` and `end_date`, to search news only. News results
+    carry a publish date; general results usually do not. Pass `include_domains`
+    to restrict the search to those sites.
     """
     options: dict = {
         "query": query,
@@ -47,6 +50,9 @@ def search_web(
         options["topic"] = "news"
         options["start_date"] = start_date.isoformat()
         options["end_date"] = end_date.isoformat()
+
+    if include_domains:
+        options["include_domains"] = list(include_domains)
 
     try:
         response = TavilyClient(api_key=api_key).search(**options)

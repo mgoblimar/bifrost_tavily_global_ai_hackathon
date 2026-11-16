@@ -6,6 +6,7 @@ from enum import Enum
 
 from core.llm import LLMCall
 from core.search import Source
+from stale_detector.models import Report
 
 
 class Status(str, Enum):
@@ -20,6 +21,8 @@ class MeetingRequest:
     meeting_time: datetime
     purpose: str
     notes: str = ""
+    talking_points: str = ""
+    trusted_domains: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -47,3 +50,4 @@ class Briefing:
     sources: tuple[Source, ...]
     calls: tuple[LLMCall, ...]
     warnings: tuple[str, ...]
+    talking_points: Report | None = None

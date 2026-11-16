@@ -42,6 +42,18 @@ class ClaimResult:
     freshness_score: int
 
 
+def evidence_basis(result: ClaimResult) -> str:
+    """What kind of source the verdict rests on, for display."""
+    used = [s for s in result.sources if s.url in result.verification.supporting_urls]
+    if not used:
+        return "No supporting source"
+    if any(s.official for s in used):
+        return "Official source"
+    if any(s.published for s in used):
+        return "Dated news"
+    return "Undated web pages"
+
+
 @dataclass(frozen=True)
 class Report:
     results: tuple[ClaimResult, ...]
