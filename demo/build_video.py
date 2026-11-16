@@ -1,6 +1,6 @@
 """Assemble the demo video from the raw recordings.
 
-Order: title, then three parts each introduced by a section card (API, detector
+Order: title, an overview of the three parts, then the parts each introduced by a section card (API, detector
 page, briefing page), a card on where this fits in real AI applications, and a
 closing card. The long waits noted in the cuts files are trimmed out.
 
@@ -22,6 +22,7 @@ WIDTH, HEIGHT, FPS = 1280, 720, 25
 FFMPEG = imageio_ffmpeg.get_ffmpeg_exe()
 ENCODE = ["-c:v", "libx264", "-preset", "medium", "-crf", "21", "-pix_fmt", "yuv420p", "-an"]
 PAGE_SWITCH_SECONDS = 1.8  # blank frames while the browser loads the next page
+FADE_SECONDS = 0.45  # cards fade in and out; footage fades in
 WAIT_LEAD_SECONDS = 1.2  # how much of each wait stays visible before the cut
 # The recorders note each wait as [start + 2.0, end - margin] on their own clock.
 RECORDED_LEAD_SECONDS = 2.0
@@ -51,6 +52,13 @@ CARDS = {
         "title": "Carbon Date", "title_size": 92,
         "body": "AI answers carry no date. Carbon Date tells your AI app how old an "
         "answer really is, before your user sees it. Built on Tavily and Bifrost.",
+    }),
+    "overview": (6, DARK, {
+        "eyebrow": "ONE CHECK, THREE WAYS TO USE IT",
+        "title": "What you are about to see", "title_size": 60,
+        "body": "<b style=\"color:#F3F1EA\">1 · The API</b> &nbsp;for other programs to call<br>"
+        "<b style=\"color:#F3F1EA\">2 · The Stale-Answer Detector page</b> &nbsp;for checking by hand<br>"
+        "<b style=\"color:#F3F1EA\">3 · The Pre-Meeting Briefing page</b> &nbsp;an AI app built on the check",
     }),
     "part1": (6, LIGHT, {
         "eyebrow": "PART 1 OF 3 · FOR AI APPLICATIONS",
@@ -161,7 +169,8 @@ def build_card(name: str) -> Path:
     seconds = CARDS[name][0]
     target = RAW_DIR / f"seg_{name}.mp4"
     run(["-loop", "1", "-t", str(seconds), "-i", str(RAW_DIR / f"card_{name}.png"),
-         "-vf", f"fps={FPS}", *ENCODE, str(target)])
+         "-vf", f"fps={FPS},fade=t=in:st=0:d={FADE_SECONDS},"
+         f"fade=t=out:st={seconds - FADE_SECONDS}:d={FADE_SECONDS}", *ENCODE, str(target)])
     return target
 
 
@@ -174,7 +183,7 @@ def build_terminal() -> Path:
     )
     graph = (
         f"[0:v]{keep_filter(cuts)},{fit}[base];"
-        f"[base][1:v]overlay=(W-w)/2:H-h-22[out]"
+        f"[base][1:v]overlay=(W-w)/2:H-h-22,fade=t=in:st=0:d={FADE_SECONDS}[out]"
     )
     run(["-i", str(RAW_DIR / "terminal.mkv"), "-i", str(RAW_DIR / "caption_terminal.png"),
          "-filter_complex", graph, "-map", "[out]", *ENCODE, str(target)])
@@ -185,7 +194,8 @@ def build_browser_part(name: str, start: float, end: float | None) -> Path:
     cuts = browser_cuts()
     target = RAW_DIR / f"seg_{name}.mp4"
     run(["-i", str(RAW_DIR / "browser.webm"),
-         "-vf", f"{keep_filter(cuts, start, end)},scale={WIDTH}:{HEIGHT}", *ENCODE, str(target)])
+         "-vf", f"{keep_filter(cuts, start, end)},scale={WIDTH}:{HEIGHT},"
+         f"fade=t=in:st=0:d={FADE_SECONDS}", *ENCODE, str(target)])
     return target
 
 
@@ -195,6 +205,7 @@ def main() -> None:
     render_images()
     segments = [
         build_card("intro"),
+        build_card("overview"),
         build_card("part1"),
         build_terminal(),
         build_browser_part("api", PAGE_SWITCH_SECONDS, detector_at),
