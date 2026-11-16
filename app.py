@@ -5,7 +5,10 @@ import streamlit as st
 st.set_page_config(page_title="Fresh Facts", page_icon="🧭", layout="wide")
 
 st.title("Fresh Facts")
-st.caption("Live-web verification tools built on Tavily and Bifrost.")
+st.caption(
+    "A freshness check for AI applications, built on Tavily and Bifrost. "
+    "Apps call it over HTTP at POST /v1/verify; these pages let you try it by hand."
+)
 
 st.page_link(
     "pages/1_Stale_Answer_Detector.py",

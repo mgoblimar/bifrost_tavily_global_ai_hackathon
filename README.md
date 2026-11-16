@@ -1,34 +1,102 @@
 # Fresh Facts
 
-Live-web verification for AI answers and meeting prep, built on **Tavily** and
-**Bifrost by Maxim AI** for the Geek Room Global AI Hackathon 2026.
+A freshness check for AI applications, built on **Tavily** and **Bifrost by Maxim AI**
+for the Geek Room Global AI Hackathon 2026.
 
-It addresses two Tavily problem statements with one shared engine:
+Send it any AI-generated answer. It finds the time-sensitive claims, re-checks each one
+against the live web, and returns a verdict, the current value, a 0-100 freshness score
+and the sources for every claim.
 
-| Tool | Problem statement | What it does |
+| Part | Problem statement | What it is |
 |---|---|---|
-| **Stale-Answer Detector** | 06 | Takes an AI-generated answer, finds the time-sensitive claims, re-checks each against the live web and gives every claim a 0-100 freshness score. |
-| **Pre-Meeting Briefing** | 05 | Takes a company or person and a meeting time, researches the previous 30 days and produces a one-page, sourced briefing. Every item is then re-checked by the detector, so verified developments are separated from uncertain or disputed ones. |
+| **Verification layer** | 06, Stale-Answer Detector for AI Applications | An HTTP API (`POST /v1/verify`) that any AI app can call before showing a model's answer, plus a page for trying it by hand. |
+| **Pre-Meeting Briefing** | 05, Pre-Meeting Briefing Agent | An AI application built on that layer. It researches a company or person over the last 30 days, drafts a one-page briefing, then uses the layer to check its own draft and the user's talking points. |
 
 ## Who it is for
 
-The owner of a small B2B distributor who also does the selling. They prepare for
-account meetings in spare minutes, often by asking an AI chatbot, and cannot tell
-which of its facts have expired. The worked example is a healthcare distributor
-visiting hospitals, where a director who left, a product recall or a changed rule
-can cost credibility in the room. This persona is a scenario built from public
-knowledge of how such businesses work, not a validated customer study, and the
-tools work for any B2B seller.
+**Developers who ship AI features.** A model's knowledge stops at its training date, but
+its answers carry no date. If your assistant, support bot or internal tool states a price,
+a version, a rule or who holds a role, you have no way to know whether that is still true.
+Fresh Facts is one HTTP call between your model and your user.
 
-Two features exist for this person:
+The briefing agent shows the pattern on a real task: someone preparing for a sales,
+partnership or investor meeting, who needs recent facts and cannot afford a stale one.
 
-- **Check my talking points.** Paste what you or a chatbot drafted for the meeting.
-  Anything no longer true about the account is flagged before you say it.
-- **Official sources first.** Name the sites you trust, such as a regulator or the
-  company's own site (a Philippine health regulator preset is included). They are
-  searched first, and every verdict is labelled as resting on an official source,
-  dated news or undated web pages. The label says where a verdict came from; it
-  does not settle regulatory questions.
+## Add it to your AI app
+
+Your app already has step 1. Fresh Facts is step 2.
+
+```python
+answer = my_model(question)                       # 1. your existing model call
+
+report = requests.post(                           # 2. check it before showing it
+    "http://localhost:8600/v1/verify",
+    json={"answer": answer},
+    timeout=180,
+).json()
+
+for claim in report["claims"]:                    # 3. flag or correct what expired
+    if claim["is_stale"]:
+        print("Outdated:", claim["claim"], "->", claim["current_value"])
+```
+
+Request fields: `answer` (required, up to 8,000 characters), `trusted_domains` (optional
+list of official sites to search first) and `context` (optional note on what the answer
+is about).
+
+Response, shortened:
+
+```json
+{
+  "overall_freshness": 15,
+  "claims_checked": 1,
+  "stale_claims": 1,
+  "claims": [
+    {
+      "claim": "The latest stable Python release is 3.12",
+      "verdict": "outdated",
+      "is_stale": true,
+      "freshness_score": 15,
+      "current_value": "Python 3.15",
+      "evidence_basis": "Dated news",
+      "sources": [
+        {"title": "...", "url": "...", "published": "2026-10-07",
+         "official": false, "used_for_verdict": true}
+      ]
+    }
+  ],
+  "gateway": [{"requested_model": "...", "served_by": "...", "is_fallback": false}],
+  "warnings": []
+}
+```
+
+[examples/guarded_chat.py](examples/guarded_chat.py) is a complete small app that does
+this. A real run on 16 November 2026:
+
+```text
+$ python -m examples.guarded_chat "Who is the CEO of Nvidia and what is their newest data centre GPU?"
+
+ASSISTANT:
+The current CEO of NVIDIA is Jensen Huang. Their latest data-centre GPU is the
+NVIDIA H100 Tensor Core GPU, based on the Hopper architecture...
+
+FRESHNESS CHECK: 2 of 2 claims are out of date.
+  - Said: The current CEO of NVIDIA is Jensen Huang
+    Now:  Colette Kress (Interim CEO)
+    Source: https://investor.nvidia.com/news/press-release-details/2026/NVIDIA-Announces-CEO-Transition
+  - Said: The latest data-centre GPU from NVIDIA is the H100 Tensor Core GPU
+    Now:  Vera Rubin and Blackwell architecture GPUs
+    Source: https://intuitionlabs.ai/articles/nvidia-data-center-gpu-specs
+```
+
+Two options sharpen the check:
+
+- **Official sources first.** Pass `trusted_domains`, such as a regulator or the
+  company's own site. They are searched first, and each verdict is labelled as resting
+  on an official source, dated news or undated web pages. The label says where a verdict
+  came from; it does not settle regulatory questions.
+- **Talking points.** In the briefing page, paste what you or a chatbot drafted for the
+  meeting. Lines that are no longer true are marked "do not say this".
 
 ## Why
 
@@ -46,10 +114,13 @@ the problem in one example, and it is why the pipeline searches dated news separ
 
 ```mermaid
 flowchart LR
-    subgraph App["Streamlit app"]
+    X[Your AI app] --> A
+    subgraph App["Fresh Facts"]
+        A["Verification API<br/>POST /v1/verify"]
         D[Stale-Answer Detector]
-        B[Pre-Meeting Briefing]
+        B[Pre-Meeting Briefing app]
     end
+    A --> D
     subgraph Core["Shared core"]
         L[Bifrost chat client]
         S[Tavily search client]
@@ -171,11 +242,20 @@ On macOS / Linux, export the variables from `.env` and run:
 npx -y @maximhq/bifrost -app-dir ./bifrost -port 8090
 ```
 
-Start the app (terminal 2) and open http://localhost:8501:
+Start the verification API (terminal 2). Interactive docs are at http://localhost:8600/docs:
+
+```bash
+.venv/Scripts/python -m uvicorn api:app --port 8600
+```
+
+Start the pages (terminal 3) and open http://localhost:8501:
 
 ```bash
 .venv/Scripts/python -m streamlit run app.py
 ```
+
+To require a key on the API, set `FRESH_FACTS_API_KEY` before starting it; callers then
+send it in the `X-API-Key` header. Without it the API is open, so keep it on localhost.
 
 The gateway listens on port 8090 and its dashboard is at http://localhost:8090.
 
@@ -185,12 +265,14 @@ The gateway listens on port 8090 and its dashboard is at http://localhost:8090.
 .venv/Scripts/python -m pytest -q
 ```
 
-59 unit tests cover scoring, both pipelines, trusted-site handling, the gateway
-client and the Markdown renderer, with the gateway and the web faked. They need no keys.
+70 unit tests cover scoring, both pipelines, the API, trusted-site handling, the
+gateway client and the Markdown renderer, with the gateway and the web faked. They need no keys.
 
 ## Project layout
 
 ```
+api.py                     Verification API (FastAPI)
+examples/guarded_chat.py   Example AI app that calls the API
 app.py                     Streamlit home page
 pages/                     The two tool pages
 core/                      Shared: settings, Bifrost chat client, Tavily search client, trusted sites
@@ -204,7 +286,7 @@ tests/                     Unit tests
 
 ## Technologies
 
-Python 3.12, Streamlit, Tavily Search API (`tavily-python`), Bifrost gateway v2.5
+Python 3.12, FastAPI, Streamlit, Tavily Search API (`tavily-python`), Bifrost gateway v2.5
 (`@maximhq/bifrost`), Groq and Google Gemini models, pytest.
 
 ## Limitations
@@ -215,6 +297,10 @@ Python 3.12, Streamlit, Tavily Search API (`tavily-python`), Bifrost gateway v2.
   publish date, which is why dated news is searched separately.
 - An undated official page can lag behind events. The verifier is told that several
   recent dated reports of a change outrank it, but this relies on the model's judgement.
+- A check takes 20 to 75 seconds, so it suits answers people will act on, not every
+  chat message. It runs after the model call, not in the stream.
+- The API has an optional shared key and no rate limiting of its own; put it behind
+  your own gateway before exposing it beyond localhost.
 - The detector checks at most 6 claims per answer and the briefing at most 5
   developments, to keep runs fast and cheap.
 - The briefing is not disambiguated automatically: for a common name, add a focus

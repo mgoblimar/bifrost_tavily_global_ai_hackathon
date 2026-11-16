@@ -52,6 +52,29 @@ def chat_json(
         "temperature": 0,
         "response_format": {"type": "json_object"},
     }
+    content, call = _send(bifrost_url, virtual_key, payload, route.primary)
+    return parse_json_object(content), call
+
+
+def chat_text(
+    bifrost_url: str, virtual_key: str, route: ModelRoute, system: str, user: str
+) -> tuple[str, LLMCall]:
+    """Send a prompt answered in plain text; return (answer, call record)."""
+    payload = {
+        "model": route.primary,
+        "fallbacks": [route.fallback],
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    }
+    return _send(bifrost_url, virtual_key, payload, route.primary)
+
+
+def _send(
+    bifrost_url: str, virtual_key: str, payload: dict, requested_model: str
+) -> tuple[str, LLMCall]:
+    """Post to the gateway, retrying while both providers are rate-limited."""
     response = _post(bifrost_url, virtual_key, payload)
     for delay in RETRY_DELAYS_SECONDS:
         if response.status_code not in RETRYABLE_STATUS_CODES:
@@ -75,8 +98,7 @@ def chat_json(
     except (ValueError, KeyError, IndexError, TypeError) as exc:
         raise LLMError("Bifrost returned an unexpected response shape.") from exc
 
-    call = _build_call(body, content, route.primary)
-    return parse_json_object(content), call
+    return content, _build_call(body, content, requested_model)
 
 
 def _post(bifrost_url: str, virtual_key: str, payload: dict) -> requests.Response:
