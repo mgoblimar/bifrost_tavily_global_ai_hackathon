@@ -40,14 +40,18 @@ def fake_call(route: ModelRoute) -> LLMCall:
     return LLMCall("", route.primary, route.primary, False, 10, 5, 1.0)
 
 
-def install_fakes(monkeypatch, extraction, verification, sources=SOURCES):
+def install_fakes(monkeypatch, extraction, verification, sources=SOURCES, news=()):
     def fake_chat_json(_url, _virtual_key, route, _system, _user):
         payload = extraction if route is SETTINGS.fast else verification
         if isinstance(payload, Exception):
             raise payload
         return payload, fake_call(route)
 
-    def fake_search(_key, _query, _max_results=5, days=None):
+    def fake_search(_key, _query, _max_results=5, days=None, depth="advanced"):
+        if days is not None:
+            if isinstance(news, Exception):
+                raise news
+            return news
         if isinstance(sources, Exception):
             raise sources
         return sources
@@ -163,3 +167,30 @@ def test_served_by_keeps_the_provider_for_models_with_slashes_in_their_name():
     }
 
     assert _build_call(body, "", "x").served_by == "groq/openai/gpt-oss-20b"
+
+
+NEWS = (
+    Source("Fresh news", "https://news.example.com/a", "Price is now $25.", TODAY),
+    Source("Duplicate", "https://example.com/pricing", "Same page again.", TODAY),
+)
+
+
+def test_dated_news_is_added_to_general_results_without_duplicates(monkeypatch):
+    install_fakes(monkeypatch, ONE_CLAIM, OUTDATED, news=NEWS)
+
+    sources = pipeline.analyze(SETTINGS, "answer", TODAY).results[0].sources
+
+    assert [s.url for s in sources] == [
+        "https://example.com/pricing",
+        "https://example.com/blog",
+        "https://news.example.com/a",
+    ]
+
+
+def test_news_search_failure_still_uses_general_results(monkeypatch):
+    install_fakes(monkeypatch, ONE_CLAIM, OUTDATED, news=SearchError("news down"))
+
+    report = pipeline.analyze(SETTINGS, "answer", TODAY)
+
+    assert report.results[0].sources == SOURCES
+    assert report.warnings == ()

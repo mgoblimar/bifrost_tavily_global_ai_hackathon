@@ -13,6 +13,8 @@ from stale_detector.scoring import freshness_score, overall_score
 MAX_CLAIMS = 6
 MAX_ANSWER_CHARS = 8000
 SOURCES_PER_CLAIM = 5
+NEWS_SOURCES_PER_CLAIM = 4
+NEWS_WINDOW_DAYS = 365
 PARALLEL_CLAIMS = 3
 
 
@@ -102,14 +104,37 @@ def _to_verification(parsed: dict, sources: tuple[Source, ...]) -> Verification:
     )
 
 
+def gather_sources(settings: Settings, claim: Claim) -> tuple[Source, ...]:
+    """Step 2: general web results plus dated news from the last year.
+
+    General results are the most relevant but carry no publish date, so on their
+    own the verifier cannot tell an old article from a new one. The news search
+    adds dated evidence. It is best-effort: if it fails we keep the general results.
+    """
+    general = search_web(
+        settings.tavily_api_key, claim.search_query, SOURCES_PER_CLAIM
+    )
+    try:
+        news = search_web(
+            settings.tavily_api_key,
+            claim.search_query,
+            NEWS_SOURCES_PER_CLAIM,
+            days=NEWS_WINDOW_DAYS,
+            depth="basic",
+        )
+    except SearchError:
+        news = ()
+    seen = {source.url for source in general}
+    fresh_news = tuple(source for source in news if source.url not in seen)
+    return general + fresh_news
+
+
 def check_claim(
     settings: Settings, claim: Claim, today: date
 ) -> tuple[ClaimResult, LLMCall | None, str | None]:
     """Steps 2-4 for one claim. A failure degrades to 'unverifiable', never a crash."""
     try:
-        sources = search_web(
-            settings.tavily_api_key, claim.search_query, SOURCES_PER_CLAIM
-        )
+        sources = gather_sources(settings, claim)
     except SearchError as exc:
         return _unverifiable(claim, (), "Live search failed."), None, str(exc)
 

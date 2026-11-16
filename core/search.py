@@ -26,12 +26,17 @@ def search_web(
     query: str,
     max_results: int = 5,
     days: int | None = None,
+    depth: str = "advanced",
 ) -> tuple[Source, ...]:
-    """Search the live web. Pass `days` to restrict to recent news only."""
+    """Search the live web.
+
+    Pass `days` to search recent news only. News results carry a publish date;
+    general results usually do not.
+    """
     options: dict = {
         "query": query,
         "max_results": max_results,
-        "search_depth": "advanced",
+        "search_depth": depth,
     }
     if days is not None:
         options["topic"] = "news"
