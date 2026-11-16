@@ -4,7 +4,7 @@
 
 Built on **Tavily** and **Bifrost** · Geek Room Global AI Hackathon 2026 · Team Jenx
 
-▶ **[Watch the demo (2 min)](demo/carbon-date-demo.mp4)**
+▶ **[Watch the demo on YouTube (2 min)](https://www.youtube.com/watch?v=ry31t3oniZ4)** · [video file](demo/carbon-date-demo.mp4)
 
 ## Example
 
